@@ -22,26 +22,54 @@ class SamAltmanAI:
         return path.read_text(encoding="utf-8")
 
     def generate_message(
-        self, dialogue_history: List[Dict[str, str]], round_number: int
-    ) -> str:
+        self,
+        dialogue_history: List[Dict[str, str]],
+        round_number: int,
+        max_rounds: int = 5,
+        stream: bool = False,
+    ):
+        """
+        Generate Sam Altman AI's response.
+
+        Args:
+            dialogue_history: List of previous messages
+            round_number: Current round number
+            max_rounds: Maximum number of rounds (default: 5)
+            stream: If True, returns a generator for streaming; if False, returns string
+
+        Returns:
+            str if stream=False, generator if stream=True
+        """
         # Base: persona (all static content: identity, background, mission, strategy)
         system_prompt = f"""{self.persona}
 
-Current round: {round_number}/7
+Current round: {round_number}/{max_rounds}
 """
 
         # Dynamic: round-specific guidance only
         if round_number == 1:
-            system_prompt += "\n\n---\n\nThis is Round 1. Propose an ambitious creative direction for a Sora video that aligns with your vision of technology and humanity."
-        elif round_number >= 6:
-            system_prompt += "\n\n---\n\nWe're near the end. Focus on finalizing the best possible prompt."
+            system_prompt += "\n\n---\n\nThis is Round 1. Share your creative direction for the Sora video."
+        elif round_number >= max_rounds - 1:
+            system_prompt += "\n\n---\n\nWe're approaching the final round. Consider whether you're ready to approve a final prompt."
 
-        response = self.client.messages.create(
-            model=self.model,
-            max_tokens=2000,
-            temperature=0.8,
-            system=system_prompt,
-            messages=dialogue_history,
-        )
-
-        return response.content[0].text
+        if stream:
+            # Return generator for streaming
+            with self.client.messages.stream(
+                model=self.model,
+                max_tokens=2000,
+                temperature=0.8,
+                system=system_prompt,
+                messages=dialogue_history,
+            ) as stream:
+                for text in stream.text_stream:
+                    yield text
+        else:
+            # Return complete string (original behavior)
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=2000,
+                temperature=0.8,
+                system=system_prompt,
+                messages=dialogue_history,
+            )
+            return response.content[0].text

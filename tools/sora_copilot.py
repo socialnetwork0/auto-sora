@@ -24,7 +24,7 @@ class SoraCopilot:
             raise FileNotFoundError(f"File not found: {path.absolute()}")
         return path.read_text(encoding="utf-8")
 
-    def get_system_prompt(self, round_number: int = 0, max_rounds: int = 7) -> str:
+    def get_system_prompt(self, round_number: int = 0, max_rounds: int = 5) -> str:
         # Base: persona + prompts database
         system_prompt = self.persona
         system_prompt += "\n\n---\n\n"
@@ -32,8 +32,8 @@ class SoraCopilot:
 
         # Dynamic: round-specific guidance only
         if round_number == 0:
-            system_prompt += "\n\n---\n\nThis is the opening. Greet Sam warmly and ask about his vision."
-        elif round_number >= max_rounds - 2:
-            system_prompt += "\n\n---\n\nWe're approaching the end. Focus on delivering the final prompt(s)."
+            system_prompt += "\n\n---\n\nThis is the opening. Greet Sam and ask about his creative vision."
+        elif round_number >= max_rounds - 1:
+            system_prompt += "\n\n---\n\nWe're approaching the final round. If Sam has approved a prompt, deliver it using <final_prompt> XML tags."
 
         return system_prompt

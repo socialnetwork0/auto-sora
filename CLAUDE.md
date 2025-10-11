@@ -17,15 +17,24 @@ The dialogue runs for 5-7 rounds, producing optimized Sora video prompts saved a
 ### Core Components
 
 ```
+app.py                       # Streamlit web UI (streaming dialogue, real-time visualization)
 tools/
-├── autonomous_sora_chat.py  # Main orchestrator (dialogue loop, termination logic, output generation)
+├── autonomous_sora_chat.py  # CLI orchestrator (dialogue loop, termination logic, file output)
 ├── sam_altman_ai.py         # Sam Altman persona generator (flips roles for API perspective)
 └── sora_copilot.py          # Expert system (loads top prompts, builds system prompt)
 
 Data files:
 ├── sam_altman_persona.md    # Sam Altman's thinking patterns and leadership principles
 └── sora_top_prompts.md      # Top 200 performing Sora prompts database
+
+Assets:
+├── public/sora.png          # Sora Copilot avatar (Web UI)
+└── public/sama.jpeg         # Sam Altman avatar (Web UI)
 ```
+
+**Dual Interface Architecture:**
+- **CLI**: `autonomous_sora_chat.py` - Batch processing, saves to `outputs/` directory
+- **Web UI**: `app.py` - Interactive streaming, real-time visualization, in-browser download
 
 ## Development Commands
 
@@ -34,10 +43,15 @@ Data files:
 # This project uses uv for dependency management (NOT pip)
 uv venv                              # Create virtual environment
 source .venv/bin/activate            # Activate (macOS/Linux)
-uv pip install anthropic python-dotenv  # Install dependencies
+
+# Install all dependencies (includes streamlit, anthropic, python-dotenv, black, watchdog)
+uv pip install -r pyproject.toml     # Or install individually:
+uv pip install anthropic python-dotenv streamlit black watchdog
 ```
 
 ### Running the System
+
+**CLI Mode (Command Line):**
 ```bash
 # Set API key (required)
 export ANTHROPIC_API_KEY='your-key-here'
@@ -50,6 +64,19 @@ python tools/autonomous_sora_chat.py --rounds 5 --output my_outputs/
 
 # Test mode (uses mock persona, faster for development)
 python tools/autonomous_sora_chat.py --test
+```
+
+**Web UI Mode (Streamlit):**
+```bash
+# Set API key (or enter in UI)
+export ANTHROPIC_API_KEY='your-key-here'
+
+# Start web interface
+streamlit run app.py
+
+# The UI will open at http://localhost:8501
+# Configure parameters (rounds, temperature) in the sidebar
+# Click "Start Dialogue" to generate prompts with streaming output
 ```
 
 ### Testing Individual Components
@@ -74,7 +101,7 @@ black tools/autonomous_sora_chat.py  # Format specific file
 ## Key Implementation Details
 
 ### Role Flipping Pattern
-`sam_altman_ai.py` implements role flipping (lines 113-121): the dialogue history uses `user=Sam, assistant=Copilot`, but Sam's API perspective requires `user=Copilot (input), assistant=Sam (previous output)`. All roles are flipped before API calls.
+Both [autonomous_sora_chat.py](tools/autonomous_sora_chat.py) and [app.py](app.py) implement role flipping: the dialogue history uses `user=Sam, assistant=Copilot`, but Sam's API perspective requires `user=Copilot (input), assistant=Sam (previous output)`. The `flip_roles()` function swaps all roles before Sam AI's API calls.
 
 ### Dialogue Termination Logic
 `autonomous_sora_chat.py:_is_dialogue_complete()` (lines 181-204):
@@ -83,14 +110,22 @@ black tools/autonomous_sora_chat.py  # Format specific file
 - Respects max_rounds as hard limit
 
 ### Prompt Extraction
-`autonomous_sora_chat.py:extract_final_prompt()` (lines 221-261):
-- Uses regex to find italic quote format: `*"...prompt text..."*`
-- Checks markdown headers: `## **FINAL PROMPT**`, `## FINAL PROMPT`
-- Falls back to last Copilot message if no explicit marker found
+Both CLI and Web UI implement `extract_final_prompt()` with identical logic:
+- Pattern 1: Italic quote format `*"...prompt text..."*`
+- Pattern 2: Markdown headers `## **FINAL PROMPT**`, `## FINAL PROMPT`, `### Final Prompt`
+- CLI fallback: Returns last Copilot message if no explicit marker
+- Web UI: Real-time extraction on each Copilot response, stores in `session_state.final_prompt`
 
 ### Data Loading
-- `SoraCopilot._load_prompts_db()`: Attempts multiple paths, limits to ~50KB to avoid token limits
-- `SamAltmanAI._load_persona()`: Supports test mode with mock persona for faster development iterations
+- [SoraCopilot._load_prompts_db()](tools/sora_copilot.py): Attempts multiple paths, limits to ~50KB to avoid token limits
+- [SamAltmanAI._load_persona()](tools/sam_altman_ai.py): Supports test mode with mock persona for faster development iterations
+
+### Streaming Implementation
+[app.py](app.py) implements real-time streaming for better UX:
+- **Sam AI**: Uses `sam.generate_message(..., stream=True)` which yields text chunks
+- **Sora Copilot**: Uses `client.messages.stream()` context manager with `stream.text_stream`
+- Both display animated cursor (`"▌"`) during streaming, removed when complete
+- Streamlit `st.empty()` placeholder enables incremental text updates without re-rendering entire UI
 
 ## Model Configuration
 
@@ -101,7 +136,7 @@ black tools/autonomous_sora_chat.py  # Format specific file
 
 ## Output Format
 
-Generated files in `outputs/` follow this structure:
+**CLI Output** (`outputs/sora_prompt_YYYYMMDD_HHMMSS.md`):
 ```markdown
 # Sora Video Prompt
 **Generated**: [timestamp]
@@ -117,6 +152,12 @@ Generated files in `outputs/` follow this structure:
 ## 📊 Metadata
 [Statistics and generation info]
 ```
+
+**Web UI Output** (downloaded via browser):
+- Same markdown format as CLI
+- Generated on-demand when clicking "Download Full Transcript" button
+- Includes real-time word count and message count statistics
+- Displays final prompt in sidebar during and after dialogue
 
 ## Common Issues
 
@@ -135,5 +176,15 @@ export ANTHROPIC_API_KEY='sk-ant-...'
 Always run from project root:
 ```bash
 cd /Users/yuanlu/Code/auto-sora
-python tools/autonomous_sora_chat.py
+python tools/autonomous_sora_chat.py  # CLI mode
+streamlit run app.py                  # Web UI mode
 ```
+
+### Streamlit Port Already in Use
+If port 8501 is occupied:
+```bash
+streamlit run app.py --server.port 8502  # Use different port
+```
+
+### Missing Avatar Images
+Web UI requires `public/sora.png` and `public/sama.jpeg` for agent avatars. If missing, Streamlit will show default avatars but functionality remains unaffected.
