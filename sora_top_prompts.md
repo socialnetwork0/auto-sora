@@ -1,7 +1,25 @@
-# Sora Top Prompts
+# Sora Top Prompts Database
+
+## 🎯 About This Database
+
+This is a **verified collection of high-performing Sora video prompts** that have achieved viral success on the platform. These are NOT theoretical examples—they are **real prompts that have been tested and validated** with actual user engagement metrics.
+
+**What makes these prompts special:**
+- ✅ **Proven Performance**: Each entry includes real engagement data (views, likes, remixes)
+- ✅ **Viral Success**: Selected from top-performing content that resonated with audiences
+- ✅ **Production-Ready**: These prompts have already generated successful Sora videos
+- ✅ **Pattern Library**: Study these to understand what works in practice, not just in theory
+
+**How to use this database:**
+- Analyze patterns in high-engagement prompts (structure, style, length, tone)
+- Reference specific techniques that led to viral content
+- Adapt successful strategies to new creative concepts
+- Learn from real-world performance metrics, not guesswork
+
+---
 
 **Total entries:** 200
-**Source:** top_1000.csv
+**Source:** top_1000.csv (filtered for highest engagement)
 
 ---
 
