@@ -114,15 +114,15 @@ def run_dialogue(max_rounds: int, temperature: float, api_key: str):
             st.markdown("**Sora Copilot (Round 0)**")
             message_placeholder = st.empty()
 
-            # Stream Copilot's greeting
-            system_prompt = copilot.get_system_prompt(0, max_rounds)
+            # Stream Copilot's greeting with prompt caching
+            system_blocks = copilot.get_system_prompt(0, max_rounds)
             full_response = ""
 
             with client.messages.stream(
                 model=config.model,
                 max_tokens=config.max_tokens,
                 temperature=config.temperature,
-                system=system_prompt,
+                system=system_blocks,
                 messages=st.session_state.dialogue_history,
             ) as stream:
                 for text in stream.text_stream:
@@ -173,15 +173,15 @@ def run_dialogue(max_rounds: int, temperature: float, api_key: str):
                 st.markdown(f"**Sora Copilot (Round {round_num})**")
                 copilot_placeholder = st.empty()
 
-                # Stream Copilot's response
+                # Stream Copilot's response with prompt caching
                 copilot_response = ""
-                system_prompt = copilot.get_system_prompt(round_num, max_rounds)
+                system_blocks = copilot.get_system_prompt(round_num, max_rounds)
 
                 with client.messages.stream(
                     model=config.model,
                     max_tokens=config.max_tokens,
                     temperature=config.temperature,
-                    system=system_prompt,
+                    system=system_blocks,
                     messages=st.session_state.dialogue_history,
                 ) as stream:
                     for text in stream.text_stream:

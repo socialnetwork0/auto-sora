@@ -40,36 +40,51 @@ class SamAltmanAI:
         Returns:
             str if stream=False, generator if stream=True
         """
-        # Base: persona (all static content: identity, background, mission, strategy)
-        system_prompt = f"""{self.persona}
+        # Build system prompt with prompt caching
+        # Static content (persona) is cached with ephemeral cache_control
+        system_blocks = [
+            {
+                "type": "text",
+                "text": self.persona,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ]
 
-Current round: {round_number}/{max_rounds}
-"""
+        # Dynamic content: round info and guidance (not cached)
+        dynamic_text = f"\n\nCurrent round: {round_number}/{max_rounds}\n"
 
-        # Dynamic: round-specific guidance only
         if round_number == 1:
-            system_prompt += "\n\n---\n\nThis is Round 1. Share your creative direction for the Sora video."
+            dynamic_text += "\n\n---\n\nThis is Round 1. Share your creative direction for the Sora video."
         elif round_number >= max_rounds - 1:
-            system_prompt += "\n\n---\n\nWe're approaching the final round. Consider whether you're ready to approve a final prompt."
+            dynamic_text += "\n\n---\n\nWe're approaching the final round. Consider whether you're ready to approve a final prompt."
+
+        system_blocks.append({"type": "text", "text": dynamic_text})
 
         if stream:
-            # Return generator for streaming
-            with self.client.messages.stream(
-                model=self.model,
-                max_tokens=2000,
-                temperature=0.8,
-                system=system_prompt,
-                messages=dialogue_history,
-            ) as stream:
-                for text in stream.text_stream:
-                    yield text
+            # Return generator for streaming (used by Web UI)
+            return self._generate_message_stream(system_blocks, dialogue_history)
         else:
-            # Return complete string (original behavior)
+            # Return complete string (used by CLI)
             response = self.client.messages.create(
                 model=self.model,
                 max_tokens=2000,
                 temperature=0.8,
-                system=system_prompt,
+                system=system_blocks,
                 messages=dialogue_history,
             )
             return response.content[0].text
+
+    def _generate_message_stream(self, system_blocks, dialogue_history):
+        """
+        Generator function for streaming Sam AI responses.
+        Separated from generate_message to avoid turning it into a generator.
+        """
+        with self.client.messages.stream(
+            model=self.model,
+            max_tokens=2000,
+            temperature=0.8,
+            system=system_blocks,
+            messages=dialogue_history,
+        ) as stream:
+            for text in stream.text_stream:
+                yield text

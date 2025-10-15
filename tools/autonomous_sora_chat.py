@@ -45,7 +45,7 @@ def setup_logging(verbose: bool = False):
 class ChatConfig:
     """Configuration for Autonomous Sora Chat."""
 
-    model: str = "claude-sonnet-4-5-20250929"
+    model: str = "claude-haiku-4-5-20251001"  ## claude-sonnet-4-5-20250929
     max_tokens: int = 3000
     temperature: float = 0.7
     max_rounds: int = 5  # Reduced from 7 for hackathon speed optimization
@@ -202,7 +202,7 @@ class AutonomousSoraChat:
         Returns:
             str if stream=False, generator if stream=True
         """
-        system_prompt = self.copilot.get_system_prompt(round_number, self.max_rounds)
+        system_blocks = self.copilot.get_system_prompt(round_number, self.max_rounds)
 
         messages = (
             history
@@ -211,26 +211,33 @@ class AutonomousSoraChat:
         )
 
         if stream:
-            # Return generator for streaming
-            with self.client.messages.stream(
-                model=self.config.model,
-                max_tokens=self.config.max_tokens,
-                temperature=self.config.temperature,
-                system=system_prompt,
-                messages=messages,
-            ) as stream:
-                for text in stream.text_stream:
-                    yield text
+            # Return generator for streaming (used by Web UI)
+            return self._copilot_response_stream(system_blocks, messages)
         else:
-            # Return complete string (original behavior)
+            # Return complete string (used by CLI)
             response = self.client.messages.create(
                 model=self.config.model,
                 max_tokens=self.config.max_tokens,
                 temperature=self.config.temperature,
-                system=system_prompt,
+                system=system_blocks,
                 messages=messages,
             )
             return response.content[0].text
+
+    def _copilot_response_stream(self, system_blocks, messages):
+        """
+        Generator function for streaming Copilot responses.
+        Separated from _copilot_response to avoid turning it into a generator.
+        """
+        with self.client.messages.stream(
+            model=self.config.model,
+            max_tokens=self.config.max_tokens,
+            temperature=self.config.temperature,
+            system=system_blocks,
+            messages=messages,
+        ) as stream:
+            for text in stream.text_stream:
+                yield text
 
     def _ai_should_stop(self, rounds: List[Dict]) -> bool:
         """Ask AI if the dialogue has naturally concluded."""
@@ -410,16 +417,23 @@ Return ONLY the pure prompt text."""
 
         # Remove common prefixes
         prefixes = [
-            "PROMPT:", "Prompt:", "Final prompt:", "Here's the prompt:",
-            "The prompt:", "Output:", "Final:", "Result:"
+            "PROMPT:",
+            "Prompt:",
+            "Final prompt:",
+            "Here's the prompt:",
+            "The prompt:",
+            "Output:",
+            "Final:",
+            "Result:",
         ]
         for prefix in prefixes:
             if prompt.startswith(prefix):
-                prompt = prompt[len(prefix):].strip()
+                prompt = prompt[len(prefix) :].strip()
 
         # Remove quotes if the entire prompt is wrapped in quotes
-        if (prompt.startswith('"') and prompt.endswith('"')) or \
-           (prompt.startswith("'") and prompt.endswith("'")):
+        if (prompt.startswith('"') and prompt.endswith('"')) or (
+            prompt.startswith("'") and prompt.endswith("'")
+        ):
             prompt = prompt[1:-1].strip()
 
         return prompt.strip()
@@ -436,20 +450,37 @@ Return ONLY the pure prompt text."""
 
         # Should contain action/scene description indicators
         good_indicators = [
-            "@sama", "@", "says", "looking", "in", "at", "with",
-            "doorbell", "footage", "camera", "screen", "office"
+            "@sama",
+            "@",
+            "says",
+            "looking",
+            "in",
+            "at",
+            "with",
+            "doorbell",
+            "footage",
+            "camera",
+            "screen",
+            "office",
         ]
 
         # Must have at least 2 good indicators
-        indicator_count = sum(1 for word in good_indicators if word.lower() in prompt.lower())
+        indicator_count = sum(
+            1 for word in good_indicators if word.lower() in prompt.lower()
+        )
         if indicator_count < 2:
             return False
 
         # Should NOT contain meta-commentary phrases
         bad_phrases = [
-            "why it works", "recommendation", "api settings",
-            "expected viral", "remix strategy", "this pattern",
-            "top 200", "viral potential"
+            "why it works",
+            "recommendation",
+            "api settings",
+            "expected viral",
+            "remix strategy",
+            "this pattern",
+            "top 200",
+            "viral potential",
         ]
 
         for phrase in bad_phrases:
@@ -469,7 +500,7 @@ Return ONLY the pure prompt text."""
             return matches[-1].strip()  # Return last match
 
         # Look for @sama patterns
-        sama_pattern = r'(@sama[^.!?\n]{10,200})'
+        sama_pattern = r"(@sama[^.!?\n]{10,200})"
         matches = re.findall(sama_pattern, text)
         if matches:
             return matches[-1].strip()
