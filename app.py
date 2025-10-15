@@ -86,6 +86,42 @@ def flip_roles(history):
     ]
 
 
+def add_history_cache_control(messages):
+    """
+    Add cache_control to the last historical message for prompt caching.
+
+    Strategy: Cache all completed dialogue history (except the current input).
+    Only the last historical message needs the cache_control marker.
+
+    Args:
+        messages: List of message dicts with role and content
+
+    Returns:
+        Modified messages list with cache_control on last history item
+    """
+    if len(messages) < 2:
+        # No history to cache (only current message or empty)
+        return messages
+
+    # Deep copy to avoid modifying original
+    import copy
+
+    messages_copy = copy.deepcopy(messages)
+
+    # Mark the second-to-last message as cacheable (last completed exchange)
+    # The last message is the current input, which we don't cache
+    last_history_idx = -2
+    if "content" in messages_copy[last_history_idx] and isinstance(
+        messages_copy[last_history_idx]["content"], list
+    ):
+        # Add cache_control to the last content block of the last historical message
+        messages_copy[last_history_idx]["content"][-1]["cache_control"] = {
+            "type": "ephemeral"
+        }
+
+    return messages_copy
+
+
 def run_dialogue(max_rounds: int, temperature: float, api_key: str):
     """Run the autonomous dialogue with streaming output."""
     try:
@@ -93,10 +129,10 @@ def run_dialogue(max_rounds: int, temperature: float, api_key: str):
         sora_avatar = "public/sora.png"
         sam_avatar = "public/sama.jpeg"
 
-        # Initialize clients
+        # Initialize clients with layered model architecture
         config = ChatConfig(max_rounds=max_rounds, temperature=temperature)
-        sam = SamAltmanAI(api_key=api_key)
-        copilot = SoraCopilot()
+        sam = SamAltmanAI(api_key=api_key, model=config.agent_model)
+        copilot = SoraCopilot(model=config.agent_model)
         client = anthropic.Anthropic(api_key=api_key)
 
         # Initialize dialogue with first user message
@@ -118,12 +154,17 @@ def run_dialogue(max_rounds: int, temperature: float, api_key: str):
             system_blocks = copilot.get_system_prompt(0, max_rounds)
             full_response = ""
 
+            # Add cache_control to dialogue history
+            messages_with_cache = add_history_cache_control(
+                st.session_state.dialogue_history
+            )
+
             with client.messages.stream(
-                model=config.model,
+                model=config.agent_model,  # Agent layer: dialogue generation
                 max_tokens=config.max_tokens,
                 temperature=config.temperature,
                 system=system_blocks,
-                messages=st.session_state.dialogue_history,
+                messages=messages_with_cache,
             ) as stream:
                 for text in stream.text_stream:
                     full_response += text
@@ -148,9 +189,10 @@ def run_dialogue(max_rounds: int, temperature: float, api_key: str):
                 st.markdown(f"**Sam Altman (Round {round_num})**")
                 sam_placeholder = st.empty()
 
-                # Stream Sam's response
+                # Stream Sam's response with dialogue history caching
                 sam_response = ""
                 flipped_history = flip_roles(st.session_state.dialogue_history)
+                flipped_history = add_history_cache_control(flipped_history)
 
                 for text_chunk in sam.generate_message(
                     flipped_history, round_num, stream=True
@@ -173,16 +215,21 @@ def run_dialogue(max_rounds: int, temperature: float, api_key: str):
                 st.markdown(f"**Sora Copilot (Round {round_num})**")
                 copilot_placeholder = st.empty()
 
-                # Stream Copilot's response with prompt caching
+                # Stream Copilot's response with prompt caching and history caching
                 copilot_response = ""
                 system_blocks = copilot.get_system_prompt(round_num, max_rounds)
 
+                # Add cache_control to dialogue history
+                messages_with_cache = add_history_cache_control(
+                    st.session_state.dialogue_history
+                )
+
                 with client.messages.stream(
-                    model=config.model,
+                    model=config.agent_model,  # Agent layer: dialogue generation
                     max_tokens=config.max_tokens,
                     temperature=config.temperature,
                     system=system_blocks,
-                    messages=st.session_state.dialogue_history,
+                    messages=messages_with_cache,
                 ) as stream:
                     for text in stream.text_stream:
                         copilot_response += text

@@ -10,10 +10,11 @@ class SamAltmanAI:
         self,
         api_key: str,
         persona_path: str = "sam_altman_persona.md",
+        model: str = "claude-haiku-4-5-20251001",  # Agent layer: currently Haiku, can upgrade to Sonnet
     ):
         self.client = anthropic.Anthropic(api_key=api_key)
         self.persona = self._load_persona(persona_path)
-        self.model = "claude-sonnet-4-5-20250929"
+        self.model = model
 
     def _load_persona(self, persona_path: str) -> str:
         path = Path(__file__).parent.parent / persona_path
@@ -28,18 +29,6 @@ class SamAltmanAI:
         max_rounds: int = 5,
         stream: bool = False,
     ):
-        """
-        Generate Sam Altman AI's response.
-
-        Args:
-            dialogue_history: List of previous messages
-            round_number: Current round number
-            max_rounds: Maximum number of rounds (default: 5)
-            stream: If True, returns a generator for streaming; if False, returns string
-
-        Returns:
-            str if stream=False, generator if stream=True
-        """
         # Build system prompt with prompt caching
         # Static content (persona) is cached with ephemeral cache_control
         system_blocks = [
